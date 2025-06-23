@@ -43,7 +43,7 @@ inline std::string get_sys_lang() noexcept
         return DEFAULT_LANGUAGE;
 
     result.resize(written - 1); // 移除末尾的null终止符
-    return result;              // Windows原生格式已是"zh-CN"，直接返回
+    return result;              // Windows原生格式 直接返回
 
 // ==================== macOS平台实现 ====================
 #elif defined(__APPLE__)
@@ -60,14 +60,16 @@ inline std::string get_sys_lang() noexcept
     if (CFStringGetCString(localeID, buffer.data(), bufferSize, kCFStringEncodingUTF8))
     {
         result = buffer.data();
-        // macOS返回格式为"zh_Hans_CN"，这里简化为"zh-CN"
+        // 将 "zh_Hans_CN" 转换为 "zh-CN"
         std::replace(result.begin(), result.end(), '_', '-');
-
-        // 处理简体中文特殊格式（可选）
-        size_t pos = result.find("Hans");
-        if (pos != std::string::npos)
+        size_t first_dash = result.find('-');
+        if (first_dash != std::string::npos)
         {
-            result.replace(pos, 4, "CN");
+            size_t second_dash = result.find('-', first_dash + 1);
+            if (second_dash != std::string::npos)
+            {
+                result.erase(second_dash); // 移除第三个部分（如 "Hans"）
+            }
         }
     }
 
@@ -76,12 +78,12 @@ inline std::string get_sys_lang() noexcept
 
 // ==================== Linux/Unix/Android平台实现 ====================
 #elif defined(__linux__) || defined(__unix__) || defined(__ANDROID__)
-                                                  // 按优先级检查环境变量：LANG -> LC_MESSAGES -> LC_ALL
-    const char *lang = std::getenv("LANG");
+                                                  // 按优先级检查环境变量：LC_ALL -> LC_MESSAGES -> LANG
+    const char *lang = std::getenv("LC_ALL");
     if (!lang || lang[0] == '\0')
         lang = std::getenv("LC_MESSAGES");
     if (!lang || lang[0] == '\0')
-        lang = std::getenv("LC_ALL");
+        lang = std::getenv("LANG");
     if (!lang || lang[0] == '\0')
         return DEFAULT_LANGUAGE;
 
@@ -91,13 +93,26 @@ inline std::string get_sys_lang() noexcept
     if (result == "C" || result == "POSIX")
         return DEFAULT_LANGUAGE;
 
+    // 转换格式：zh_CN -> zh-CN
+    std::replace(result.begin(), result.end(), '_', '-');
+
+    // 保证语言代码小写，国家代码大写
+    auto dash_pos = result.find('-');
+    if (dash_pos != std::string::npos && dash_pos + 1 < result.size())
+    {
+        std::transform(result.begin(), result.begin() + dash_pos, result.begin(), ::tolower);
+        std::transform(result.begin() + dash_pos + 1, result.end(), result.begin() + dash_pos + 1, ::toupper);
+    }
+
     // 移除编码后缀（如".UTF-8"）
     size_t dotPos = result.find('.');
     if (dotPos != std::string::npos)
         result = result.substr(0, dotPos);
+    // 移除编码后缀（如"@"）
+    size_t atPos = result.find('@');
+    if (atPos != std::string::npos)
+        result = result.substr(0, atPos);
 
-    // 转换格式：zh_CN -> zh-CN
-    std::replace(result.begin(), result.end(), '_', '-');
     return result;
 
 // ==================== 其他平台 ====================
